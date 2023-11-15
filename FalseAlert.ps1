@@ -26,7 +26,6 @@ function Clean-OutputDirectory(){
     New-Item -Name OpsMgrTrace -ItemType Directory -Path $outputfolderpath | Out-Null    
 }
 
-
 function Import-OMModuleMS(){  
     Log-Trace "INFO" "Importing OM module.." 
     Import-Module OperationsManager
@@ -54,11 +53,18 @@ function Capture-ETL(){
         try
         {            
             #"$($date1) Calling SCOM Get-SCOMAlert in loop.." >> $outputfolderpath\logs.txt
-            $diskalerts = Get-SCOMAlert -Name $AlertName -ResolutionState 255 | Where-Object {$_.TimeRaised -gt (Get-Date).ToUniversalTime().AddMinutes(-10)}
+            $diskalerts = Get-SCOMAlert -Name $AlertName -ResolutionState 255 | Where-Object {$_.TimeRaised -gt (Get-Date).ToUniversalTime().AddMinutes(-10)}            
+            
+            for($i=0; $i -lt 1; $i++)
+            {
+                #sleeping for 10 minutes just to make sure we are not picking existing false alert
+                Log-Trace "INFO" "Sleeping for 10 minutes to negate any false alert at start"
+                Start-Sleep 600
+            }
 
             foreach($diskalert in $diskalerts)
             {
-                #if the alert is closed in next 5 min run as we considering it to be false for now.
+                #if the alert is closed in next 5 min run then we are considering it to be false for now.
                 if($diskalert.TimeResolved -le $diskalert.TimeRaised.AddMinutes(9))
                 {
                     #$diskalert | Select Name,MonitoringObjectPath,MonitoringObjectDisplayName,TimeRaised,TimeResolved                    
@@ -66,7 +72,7 @@ function Capture-ETL(){
                     $diskalert | Format-List * | Out-File $outputfolderpath\alert.txt
                 }
                 else{
-                    #we are sleeping for 10 minutes and checking again            
+                    #we are sleeping for 9 minutes and checking again            
                     Log-Trace "INFO" "False disk alert NOT found"
                     Log-Trace "INFO" "Sleeping for 9 minutes"
                     Start-Sleep 540            
@@ -99,14 +105,13 @@ function Capture-ETL(){
             Copy-Item -Path "C:\Windows\Logs\OpsMgrTrace\*.log" -Destination "$outputfolderpath\OpsMgrTrace"            
             Log-Trace "INFO" "Copying completed.." 
             Remove-Item -Path '.\FormatTracing - Custom.cmd' -Force             
-             Log-Trace "INFO" "Script ended.." 
+            Log-Trace "INFO" "Script ended.." 
             break            
         }
    }     
 }
 
-function Main(){
-    
+function Main(){    
     Clean-OutputDirectory 
     Log-Trace "INFO" "Script Started."
     Get-TimeZone | Out-File $outputfolderpath\timezone.txt
