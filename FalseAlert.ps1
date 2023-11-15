@@ -9,7 +9,7 @@ $AlertName="% free space is too low"
 #principal name of the server from the Get-SCOM Alert property
 #find the PrincipalName using the below command in OM Shell.
 #Get-SCOMAlert -name "<Alert Name>" | Select Name,PrincipalName
-#$PrincipalName= "<Server Name>"
+#$PrincipalName= "<Server Name>".
 
 function Log-Trace($level, $message){
     $date=Get-Date -Format "mm/dd/yyyy-hh:mm:ss"
