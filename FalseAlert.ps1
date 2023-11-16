@@ -12,7 +12,7 @@ $AlertName="% free space is too low"
 #$PrincipalName= "<Server Name>"..
 
 function Log-Trace($level, $message){
-    $date=Get-Date -Format "mm/dd/yyyy-hh:mm:ss"
+    $date=Get-Date -Format "MM/dd/yyyy-hh:mm:ss"
     $date + "  " + "[" + $level + "]" + "  " + $message | Out-File -Append $outputfolderpath\logs.txt
 }
 
@@ -21,7 +21,7 @@ function Clean-OutputDirectory(){
     if($folder)
     {
         Remove-Item $outputfolderpath\*.* -Exclude "*.ps1" -Force
-        Get-ChildItem $outputfolderpath | Remove-Item -Force
+        Get-ChildItem $outputfolderpath | Remove-Item -Recurse -Force
     }
     New-Item -Name OpsMgrTrace -ItemType Directory -Path $outputfolderpath | Out-Null    
 }
@@ -48,37 +48,28 @@ function Capture-ETL(){
 
    #write the logic to stop the trace
    #e.x: when an alert is generated
+   
+   #sleeping for 10 minutes just to make sure we are not picking existing false alert
+   #Log-Trace "INFO" "Sleeping for 10 minutes to negate any false alert at start"
+   #Start-Sleep 600
+   
    While($true)
    {                  
         try
         {            
             #"$($date1) Calling SCOM Get-SCOMAlert in loop.." >> $outputfolderpath\logs.txt
-            $diskalerts = Get-SCOMAlert -Name $AlertName -ResolutionState 255 | Where-Object {$_.TimeRaised -gt (Get-Date).ToUniversalTime().AddMinutes(-10)}            
+            $diskalerts = Get-SCOMAlert -Name $AlertName -ResolutionState 255 | Where-Object {$_.TimeRaised -gt (Get-Date).ToUniversalTime().AddMinutes(-9)}          
             
-            for($i=0; $i -lt 1; $i++)
-            {
-                #sleeping for 10 minutes just to make sure we are not picking existing false alert
-                Log-Trace "INFO" "Sleeping for 10 minutes to negate any false alert at start"
-                Start-Sleep 600
-            }
-
             foreach($diskalert in $diskalerts)
             {
                 #if the alert is closed in next 5 min run then we are considering it to be false for now.
-                if($diskalert.TimeResolved -le $diskalert.TimeRaised.AddMinutes(9))
+                if($diskalert.TimeResolved -le $diskalert.TimeRaised.AddMinutes(7))
                 {
                     #$diskalert | Select Name,MonitoringObjectPath,MonitoringObjectDisplayName,TimeRaised,TimeResolved                    
                     Log-Trace "INFO" "False disk alert found"
                     $diskalert | Format-List * | Out-File $outputfolderpath\alert.txt
-                }
-                else{
-                    #we are sleeping for 9 minutes and checking again            
-                    Log-Trace "INFO" "False disk alert NOT found"
-                    Log-Trace "INFO" "Sleeping for 9 minutes"
-                    Start-Sleep 540            
-                    Log-Trace "INFO" "Resuming after sleep" 
-                }
-            }                           
+                }                
+            }                                     
         }
         catch
         {
@@ -104,11 +95,30 @@ function Capture-ETL(){
             Log-Trace "INFO" "Copying formatted data.."              
             Copy-Item -Path "C:\Windows\Logs\OpsMgrTrace\*.log" -Destination "$outputfolderpath\OpsMgrTrace"            
             Log-Trace "INFO" "Copying completed.." 
-            Remove-Item -Path '.\FormatTracing - Custom.cmd' -Force             
+            Remove-Item -Path '.\FormatTracing - Custom.cmd' -Force
+            Export-EventLog          
             Log-Trace "INFO" "Script ended.." 
             break            
         }
+        else{
+            #we are sleeping for 9 minutes and checking again            
+            Log-Trace "INFO" "False disk alert NOT found"
+            Log-Trace "INFO" "Sleeping for 9 minutes"
+            Start-Sleep 540            
+            Log-Trace "INFO" "Resuming after sleep" 
+        }
    }     
+}
+
+function Export-EventLog(){
+    Log-Trace "INFO" "Exporting Event Log.."
+    $eventlogsname = @("System","Application","Operations Manager")
+    $outputfolderpath1 = $outputfolderpath + "\"
+    foreach($eventlogname in $eventlogsname){
+        $exportFileName = $eventlogname + (get-date -f yyyyMMdd) + ".evtx"
+        $logFile = Get-WmiObject Win32_NTEventlogFile | Where-Object {$_.logfilename -eq $eventlogname}
+        $logFile.backupeventlog($outputfolderpath1 + $exportFileName) | Out-Null
+    }
 }
 
 function Main(){    
